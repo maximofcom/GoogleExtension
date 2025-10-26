@@ -2,365 +2,221 @@
 (function() {
   'use strict';
 
-  console.log('[YT Subtitles] Content script loaded');
-
   let subtitlePanel = null;
   let currentSubtitles = [];
-  let currentTrackIndex = 0;
   let availableTracks = [];
+  let trackingInterval = null;
 
-  // Inject the page script to access YouTube's global variables
-  function injectPageScript() {
+  const injectPageScript = () => {
     const script = document.createElement('script');
     script.src = chrome.runtime.getURL('inject.js');
-    script.onload = function() {
-      this.remove();
-    };
+    script.onload = () => script.remove();
     (document.head || document.documentElement).appendChild(script);
-    console.log('[YT Subtitles] Page script injected');
-  }
+  };
 
-  // Create the subtitle panel UI
-  function createSubtitlePanel() {
-    // Find the secondary (sidebar) element
-    const secondary = document.querySelector('#secondary');
-    if (!secondary) {
-      console.log('[YT Subtitles] Secondary sidebar not found, retrying...');
-      return null;
-    }
+  const createSubtitlePanel = () => {
+    const secondary = document.querySelector('ytd-watch-flexy #secondary');
+    if (!secondary) return null;
 
-    // Remove existing panel if any
     const existing = document.getElementById('yt-subtitle-panel');
     if (existing) {
       stopTracking();
       existing.remove();
     }
 
-    // Create panel container
     const panel = document.createElement('div');
     panel.id = 'yt-subtitle-panel';
     panel.className = 'yt-subtitle-panel';
+    panel.innerHTML = `
+      <div class="yt-subtitle-header">
+        <div class="yt-subtitle-title">Video Subtitles</div>
+        <div class="yt-subtitle-controls">
+          <select class="yt-subtitle-track-select"><option value="">Select language...</option></select>
+          <button class="yt-subtitle-close" title="Hide subtitle panel">×</button>
+        </div>
+      </div>
+      <div class="yt-subtitle-content"><div class="yt-subtitle-loading">Loading subtitles...</div></div>
+    `;
 
-    // Create header
-    const header = document.createElement('div');
-    header.className = 'yt-subtitle-header';
-    
-    const title = document.createElement('div');
-    title.className = 'yt-subtitle-title';
-    title.textContent = 'Video Subtitles';
-    
-    const controls = document.createElement('div');
-    controls.className = 'yt-subtitle-controls';
-    
-    const trackSelect = document.createElement('select');
-    trackSelect.className = 'yt-subtitle-track-select';
-    trackSelect.innerHTML = '<option value="">Select language...</option>';
-    trackSelect.addEventListener('change', handleTrackChange);
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'yt-subtitle-close';
-    closeBtn.textContent = '×';
-    closeBtn.title = 'Hide subtitle panel';
-    closeBtn.addEventListener('click', () => {
+    panel.querySelector('.yt-subtitle-track-select').addEventListener('change', handleTrackChange);
+    panel.querySelector('.yt-subtitle-close').addEventListener('click', () => {
       stopTracking();
       panel.style.display = 'none';
     });
-    
-    controls.appendChild(trackSelect);
-    controls.appendChild(closeBtn);
-    
-    header.appendChild(title);
-    header.appendChild(controls);
 
-    // Create subtitle content area
-    const content = document.createElement('div');
-    content.className = 'yt-subtitle-content';
-    content.innerHTML = '<div class="yt-subtitle-loading">Loading subtitles...</div>';
-
-    panel.appendChild(header);
-    panel.appendChild(content);
-
-    // Insert at the top of secondary
     secondary.insertBefore(panel, secondary.firstChild);
-    
-    console.log('[YT Subtitles] Panel created');
     return panel;
-  }
+  };
 
-  // Handle track selection change
-  function handleTrackChange(event) {
-    const trackIndex = parseInt(event.target.value);
-    if (isNaN(trackIndex) || !availableTracks[trackIndex]) return;
-    
-    currentTrackIndex = trackIndex;
-    const track = availableTracks[trackIndex];
-    
-    // Request the inject script to fetch this track
-    window.postMessage({
-      type: 'YT_FETCH_TRACK',
-      track: track
-    }, '*');
-    
+  const handleTrackChange = (e) => {
+    const idx = parseInt(e.target.value);
+    if (isNaN(idx) || !availableTracks[idx]) return;
+    window.postMessage({ type: 'YT_FETCH_TRACK', track: availableTracks[idx] }, '*');
     updateSubtitleContent('<div class="yt-subtitle-loading">Loading subtitles...</div>');
-  }
+  };
 
-  // Parse subtitle data based on format
-  function parseSubtitles(data, format) {
+  const parseSubtitles = (data, format) => {
     const subtitles = [];
-    
     try {
       if (format === 'json3' || format === 'json') {
-        const parsed = JSON.parse(data);
-        const events = parsed.events || [];
-        
-        for (const event of events) {
-          if (event.segs) {
-            const text = event.segs.map(seg => seg.utf8 || '').join('');
-            if (text.trim()) {
-              subtitles.push({
-                start: event.tStartMs / 1000,
-                duration: event.dDurationMs / 1000,
-                text: text.trim()
-              });
-            }
+        (JSON.parse(data).events || []).forEach(e => {
+          if (e.segs) {
+            const text = e.segs.map(s => s.utf8 || '').join('').trim();
+            if (text) subtitles.push({ start: e.tStartMs / 1000, duration: e.dDurationMs / 1000, text });
           }
-        }
+        });
       } else if (format === 'srv3' || format === 'xml') {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(data, 'text/xml');
-        const textElements = xmlDoc.getElementsByTagName('text');
-        
-        for (const element of textElements) {
-          const start = parseFloat(element.getAttribute('start') || 0);
-          const duration = parseFloat(element.getAttribute('dur') || 0);
-          const text = element.textContent;
-          
-          if (text && text.trim()) {
+        const xmlDoc = new DOMParser().parseFromString(data, 'text/xml');
+        Array.from(xmlDoc.getElementsByTagName('text')).forEach(el => {
+          const text = el.textContent?.trim();
+          if (text) {
             subtitles.push({
-              start: start,
-              duration: duration,
-              text: text.trim()
+              start: parseFloat(el.getAttribute('start') || 0),
+              duration: parseFloat(el.getAttribute('dur') || 0),
+              text
             });
           }
-        }
+        });
       }
-    } catch (e) {
-      console.error('[YT Subtitles] Error parsing subtitles:', e);
-    }
-    
+    } catch (e) {}
     return subtitles;
-  }
+  };
 
-  // Format time in MM:SS format
-  function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }
+  const updateSubtitleContent = (html) => {
+    const content = subtitlePanel?.querySelector('.yt-subtitle-content');
+    if (content) content.innerHTML = html;
+  };
 
-  // Update subtitle content display
-  function updateSubtitleContent(html) {
-    if (!subtitlePanel) return;
-    const content = subtitlePanel.querySelector('.yt-subtitle-content');
-    if (content) {
-      content.innerHTML = html;
-    }
-  }
-
-  // Display parsed subtitles
-  function displaySubtitles(subtitles) {
-    if (!subtitles || subtitles.length === 0) {
-      updateSubtitleContent('<div class="yt-subtitle-empty">No subtitles available</div>');
-      return;
-    }
-
-    let html = '<div class="yt-subtitle-list">';
-    for (const subtitle of subtitles) {
-      const timeStr = formatTime(subtitle.start);
-      html += `
-        <div class="yt-subtitle-item" data-start="${subtitle.start}">
-          <div class="yt-subtitle-time">${timeStr}</div>
-          <div class="yt-subtitle-text">${escapeHtml(subtitle.text)}</div>
-        </div>
-      `;
-    }
-    html += '</div>';
-    
-    updateSubtitleContent(html);
-    
-    // Add click handlers to seek to subtitle time
-    const items = subtitlePanel.querySelectorAll('.yt-subtitle-item');
-    items.forEach(item => {
-      item.addEventListener('click', () => {
-        const startTime = parseFloat(item.getAttribute('data-start'));
-        seekToTime(startTime);
-      });
-    });
-
-    // Start auto-scroll tracking
-    setTimeout(startTracking, 500);
-  }
-
-  // Escape HTML to prevent XSS
-  function escapeHtml(text) {
+  const escapeHtml = (text) => {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-  }
+  };
 
-  // Seek video to specific time
-  function seekToTime(seconds) {
-    const video = document.querySelector('video');
-    if (video) {
-      video.currentTime = seconds;
-    }
-  }
+  const displaySubtitles = (subs) => {
+    if (!subs?.length) return updateSubtitleContent('<div class="yt-subtitle-empty">No subtitles available</div>');
+    
+    const html = '<div class="yt-subtitle-text">' + 
+      subs.map(s => `<span class="yt-subtitle-item" data-start="${s.start}">${escapeHtml(s.text)}</span>`).join(' ') + 
+      '</div>';
+    
+    updateSubtitleContent(html);
+    subtitlePanel.querySelectorAll('.yt-subtitle-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const video = document.querySelector('video');
+        if (video) video.currentTime = parseFloat(item.getAttribute('data-start'));
+      });
+    });
+    setTimeout(startTracking, 500);
+  };
 
-  // Auto-scroll tracking
-  let trackingInterval = null;
-
-  function updateActiveSubtitle() {
+  const updateActiveSubtitle = () => {
     const video = document.querySelector('video');
     if (!video || !subtitlePanel) return;
 
-    const currentTime = video.currentTime;
+    const time = video.currentTime;
     const items = subtitlePanel.querySelectorAll('.yt-subtitle-item');
-    if (items.length === 0) return;
+    if (!items.length) return;
     
-    let activeItem = null;
+    let active = null;
     items.forEach(item => {
       const start = parseFloat(item.getAttribute('data-start'));
-      const nextItem = item.nextElementSibling;
-      const end = nextItem ? parseFloat(nextItem.getAttribute('data-start')) : start + 3;
+      const end = item.nextElementSibling ? parseFloat(item.nextElementSibling.getAttribute('data-start')) : start + 3;
       
-      if (currentTime >= start && currentTime < end) {
-        activeItem = item;
+      if (time >= start && time < end) {
+        active = item;
         item.classList.add('active');
       } else {
         item.classList.remove('active');
       }
     });
 
-    // Scroll to center the active subtitle
-    if (activeItem) {
-      activeItem.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'center',
-        inline: 'nearest'
-      });
-    }
-  }
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+  };
 
-  function startTracking() {
+  const startTracking = () => {
     stopTracking();
-    const video = document.querySelector('video');
-    if (video) {
-      trackingInterval = setInterval(updateActiveSubtitle, 200);
-    }
-  }
+    if (document.querySelector('video')) trackingInterval = setInterval(updateActiveSubtitle, 200);
+  };
 
-  function stopTracking() {
+  const stopTracking = () => {
     if (trackingInterval) {
       clearInterval(trackingInterval);
       trackingInterval = null;
     }
-  }
+  };
 
-  // Update track selector dropdown
-  function updateTrackSelector(tracks) {
-    if (!subtitlePanel) return;
-    
-    const select = subtitlePanel.querySelector('.yt-subtitle-track-select');
+  const updateTrackSelector = (tracks) => {
+    const select = subtitlePanel?.querySelector('.yt-subtitle-track-select');
     if (!select) return;
     
-    select.innerHTML = '';
+    select.innerHTML = tracks.map((t, i) => {
+      const name = t.name?.simpleText || t.languageCode || 'Unknown';
+      const type = t.kind === 'asr' ? ' (Auto-generated)' : '';
+      return `<option value="${i}">${name}${type}</option>`;
+    }).join('');
     
-    tracks.forEach((track, index) => {
-      const option = document.createElement('option');
-      option.value = index;
-      
-      const languageName = track.name?.simpleText || track.languageCode || 'Unknown';
-      const trackType = track.kind === 'asr' ? ' (Auto-generated)' : '';
-      option.textContent = `${languageName}${trackType}`;
-      
-      select.appendChild(option);
-    });
-    
-    // Auto-select first track
-    if (tracks.length > 0) {
-      select.selectedIndex = 0;
-    }
-  }
+    if (tracks.length) select.selectedIndex = 0;
+  };
 
-  // Listen for messages from inject script
-  window.addEventListener('message', function(event) {
-    if (event.source !== window) return;
-    
-    if (event.data.type === 'YT_SUBTITLE_TRACKS') {
-      console.log('[YT Subtitles] Received subtitle tracks:', event.data.tracks);
-      availableTracks = event.data.tracks || [];
-      
+  const ensurePanel = (callback) => {
+    if (!subtitlePanel) {
+      subtitlePanel = createSubtitlePanel();
       if (!subtitlePanel) {
-        subtitlePanel = createSubtitlePanel();
+        setTimeout(() => {
+          subtitlePanel = createSubtitlePanel();
+          if (subtitlePanel) callback();
+        }, 1000);
+        return false;
       }
-      
-      if (subtitlePanel && availableTracks.length > 0) {
+    }
+    return true;
+  };
+
+  window.addEventListener('message', (e) => {
+    if (e.source !== window) return;
+    
+    if (e.data.type === 'YT_SUBTITLE_TRACKS') {
+      availableTracks = e.data.tracks || [];
+      if (ensurePanel(() => {
+        updateTrackSelector(availableTracks);
+        if (availableTracks.length) subtitlePanel.style.display = 'block';
+      }) && availableTracks.length) {
         updateTrackSelector(availableTracks);
         subtitlePanel.style.display = 'block';
       }
-    } else if (event.data.type === 'YT_SUBTITLE_DATA') {
-      console.log('[YT Subtitles] Received subtitle data:', event.data.format);
-      
-      const subtitles = parseSubtitles(event.data.data, event.data.format);
-      currentSubtitles = subtitles;
-      
-      if (!subtitlePanel) {
-        subtitlePanel = createSubtitlePanel();
+    } else if (e.data.type === 'YT_SUBTITLE_DATA') {
+      currentSubtitles = parseSubtitles(e.data.data, e.data.format);
+      if (ensurePanel(() => displaySubtitles(currentSubtitles))) {
+        displaySubtitles(currentSubtitles);
       }
-      
-      displaySubtitles(subtitles);
     }
   });
 
-  // Monitor for page changes and recreate panel if needed
-  function checkAndCreatePanel() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const videoId = urlParams.get('v');
+  const checkAndCreatePanel = (retries = 0) => {
+    const videoId = new URLSearchParams(window.location.search).get('v');
+    if (!videoId) return;
     
-    if (videoId && document.querySelector('#secondary')) {
+    if (document.querySelector('ytd-watch-flexy #secondary')) {
       if (!subtitlePanel || !document.body.contains(subtitlePanel)) {
         subtitlePanel = createSubtitlePanel();
       }
-      
-      // Request subtitle tracks
       window.postMessage({ type: 'YT_REQUEST_TRACKS' }, '*');
+    } else if (retries < 10) {
+      setTimeout(() => checkAndCreatePanel(retries + 1), 500);
     }
-  }
+  };
 
-  // Initialize
-  function initialize() {
-    // Inject the page script first
-    injectPageScript();
-    
-    // Wait for page to be ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(checkAndCreatePanel, 1000);
-      });
-    } else {
-      setTimeout(checkAndCreatePanel, 1000);
+  injectPageScript();
+  
+  const init = () => setTimeout(checkAndCreatePanel, 2000);
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
+  
+  let lastUrl = location.href;
+  new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      setTimeout(checkAndCreatePanel, 2000);
     }
-    
-    // Monitor for navigation changes
-    let lastUrl = location.href;
-    new MutationObserver(() => {
-      const url = location.href;
-      if (url !== lastUrl) {
-        lastUrl = url;
-        setTimeout(checkAndCreatePanel, 1500);
-      }
-    }).observe(document, { subtree: true, childList: true });
-  }
-
-  initialize();
+  }).observe(document, { subtree: true, childList: true });
 })();

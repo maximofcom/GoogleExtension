@@ -107,54 +107,29 @@
   background-color: var(--yt-spec-text-secondary);
 }
 
-.yt-subtitle-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.yt-subtitle-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--yt-spec-text-primary);
+  padding: 8px;
+  text-align: justify;
 }
 
 .yt-subtitle-item {
-  padding: 12px 16px;
-  background: var(--yt-spec-raised-background);
-  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
+  transition: color 0.2s;
 }
 
 .yt-subtitle-item:hover {
-  background: var(--yt-spec-badge-chip-background);
-  border-color: var(--yt-spec-10-percent-layer);
-  transform: translateX(4px);
-}
-
-.yt-subtitle-item:active {
-  transform: translateX(2px);
+  color: var(--yt-spec-call-to-action);
 }
 
 .yt-subtitle-item.active {
-  border-left: 4px solid #3ea6ff;
-  background: var(--yt-spec-badge-chip-background);
-}
-
-.yt-subtitle-item.active .yt-subtitle-time {
   color: #3ea6ff;
-  font-weight: 600;
-}
-
-.yt-subtitle-time {
-  font-size: 11px;
-  color: var(--yt-spec-text-secondary);
   font-weight: 500;
-  margin-bottom: 4px;
-  font-family: 'Roboto Mono', monospace;
-}
-
-.yt-subtitle-text {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--yt-spec-text-primary);
-  word-wrap: break-word;
+  background: rgba(62, 166, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
 }
 
 .yt-subtitle-loading,
