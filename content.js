@@ -82,14 +82,10 @@
       else item.classList.remove('active');
     });
     if (active) {
-      const container = panel.querySelector('.yt-subtitle-content');
-      if (container) {
-        const itemRect = active.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
-          const offset = active.offsetTop - container.offsetTop - container.clientHeight / 2 + active.clientHeight / 2;
-          container.scrollTo({ top: offset, behavior: 'smooth' });
-        }
+      const c = panel.querySelector('.yt-subtitle-content');
+      if (c) {
+        const o = active.offsetTop - (c.clientHeight - active.clientHeight) / 2;
+        c.scrollTo({ top: o, behavior: 'smooth' });
       }
     }
   };

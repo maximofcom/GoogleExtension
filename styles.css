@@ -52,16 +52,27 @@
 .yt-subtitle-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px;
   background: var(--yt-spec-general-background-a);
   scrollbar-width: thin;
-  scrollbar-color: var(--yt-spec-icon-disabled) transparent;
+  scrollbar-color: var(--yt-spec-icon-disabled) var(--yt-spec-10-percent-layer);
   scroll-behavior: smooth;
+  max-height: 100%;
 }
-.yt-subtitle-content::-webkit-scrollbar { width: 8px; }
-.yt-subtitle-content::-webkit-scrollbar-track { background: transparent; }
-.yt-subtitle-content::-webkit-scrollbar-thumb { background-color: var(--yt-spec-icon-disabled); border-radius: 4px; }
-.yt-subtitle-content::-webkit-scrollbar-thumb:hover { background-color: var(--yt-spec-text-secondary); }
+.yt-subtitle-content::-webkit-scrollbar { width: 10px; }
+.yt-subtitle-content::-webkit-scrollbar-track { 
+  background: var(--yt-spec-10-percent-layer); 
+  border-radius: 5px;
+}
+.yt-subtitle-content::-webkit-scrollbar-thumb { 
+  background-color: var(--yt-spec-icon-disabled); 
+  border-radius: 5px;
+  border: 2px solid var(--yt-spec-10-percent-layer);
+}
+.yt-subtitle-content::-webkit-scrollbar-thumb:hover { 
+  background-color: var(--yt-spec-text-secondary); 
+}
 .yt-subtitle-text { font-size: 14px; line-height: 1.8; color: var(--yt-spec-text-primary); padding: 8px; text-align: justify; }
 .yt-subtitle-item { cursor: pointer; transition: color .2s; }
 .yt-subtitle-item:hover { color: var(--yt-spec-call-to-action); }
