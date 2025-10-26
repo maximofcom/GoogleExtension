@@ -1,18 +1,6 @@
-// content.js
 (function() {
   'use strict';
-  
-  // State variables
-  let panel, interval, videoCache, contentCache;
-  const tracks = [];
-  let settings = { leftClickStep: 2.0, mouseWheelStep: 2 };
-  
-  // Constants
-  const TRACK_INTERVAL = 200;
-  const CHECK_DELAY = 2000;
-  const CREATE_RETRY = 1000;
-  
-  // Utility functions
+  let panel, interval, videoCache, contentCache, settings = { leftClickStep: 2, mouseWheelStep: 2 };
   const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
   const inject = () => {
@@ -25,262 +13,122 @@
   const create = () => {
     const sec = document.querySelector('ytd-watch-flexy #secondary');
     if (!sec) return null;
-    
     const old = document.getElementById('yt-subtitle-panel');
-    if (old) {
-      stopTrack();
-      old.remove();
-    }
-    
-    const p = document.createElement('div');
-    p.id = 'yt-subtitle-panel';
-    p.className = 'yt-subtitle-panel';
-    p.innerHTML = `<div class="yt-subtitle-header"><div class="yt-subtitle-title">Video Subtitles</div>
-      <button class="yt-subtitle-close" title="Hide">×</button></div>
-      <div class="yt-subtitle-content"><div class="yt-subtitle-loading">Loading...</div></div>`;
-    
-    p.querySelector('.yt-subtitle-close').onclick = () => {
-      stopTrack();
-      p.style.display = 'none';
-    };
-    
-    contentCache = null;
-    return sec.insertBefore(p, sec.firstChild);
-  };
-
-  const parseJsonFormat = (data) => {
-    const parsed = JSON.parse(data);
-    return (parsed.events || [])
-      .filter(e => e.segs)
-      .map(e => ({
-        start: e.tStartMs / 1000,
-        text: e.segs.map(s => s.utf8 || '').join('').trim()
-      }))
-      .filter(s => s.text);
-  };
-
-  const parseXmlFormat = (data) => {
-    const doc = new DOMParser().parseFromString(data, 'text/xml');
-    return Array.from(doc.getElementsByTagName('text'))
-      .map(el => ({
-        start: parseFloat(el.getAttribute('start') || 0),
-        text: (el.textContent || '').trim()
-      }))
-      .filter(s => s.text);
+    if (old) stopTrack(), old.remove();
+    const p = Object.assign(document.createElement('div'), {
+      id: 'yt-subtitle-panel',
+      className: 'yt-subtitle-panel',
+      innerHTML: `<div class="yt-subtitle-header"><div class="yt-subtitle-title">Video Subtitles</div><button class="yt-subtitle-close" title="Hide">×</button></div><div class="yt-subtitle-content"><div class="yt-subtitle-loading">Loading...</div></div>`
+    });
+    p.querySelector('.yt-subtitle-close').onclick = () => (stopTrack(), p.style.display = 'none');
+    return contentCache = null, sec.insertBefore(p, sec.firstChild);
   };
 
   const parse = (data, fmt) => {
     try {
       return (fmt === 'json3' || fmt === 'json') 
-        ? parseJsonFormat(data)
-        : parseXmlFormat(data);
-    } catch (e) {
-      return [];
-    }
+        ? (JSON.parse(data).events || []).filter(e => e.segs).map(e => ({start: e.tStartMs/1000, text: e.segs.map(s => s.utf8||'').join('').trim()})).filter(s => s.text)
+        : Array.from(new DOMParser().parseFromString(data, 'text/xml').getElementsByTagName('text')).map(el => ({start: parseFloat(el.getAttribute('start')||0), text: (el.textContent||'').trim()})).filter(s => s.text);
+    } catch { return []; }
   };
 
-  const escape = (t) => t.replace(/[&<>"']/g, m => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[m]));
+  const escape = t => t.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const setContent = h => ((contentCache = contentCache || panel?.querySelector('.yt-subtitle-content')) && (contentCache.innerHTML = h));
 
-  const setContent = (h) => {
-    if (!contentCache) {
-      contentCache = panel?.querySelector('.yt-subtitle-content');
-    }
-    if (contentCache) {
-      contentCache.innerHTML = h;
-    }
-  };
-
-  const show = (subs) => {
-    if (!subs?.length) {
-      setContent('<div class="yt-subtitle-empty">No subtitles</div>');
-      return;
-    }
-    
-    const html = '<div class="yt-subtitle-text">' +
-      subs.map(s => `<span class="yt-subtitle-item" data-start="${s.start}">${escape(s.text)}</span>`).join(' ') +
-      '</div>';
-    setContent(html);
-    
-    // Use event delegation instead of individual listeners
-    const textContainer = panel.querySelector('.yt-subtitle-text');
-    if (textContainer) {
-      textContainer.onclick = (e) => {
-        const item = e.target.closest('.yt-subtitle-item');
-        if (item && videoCache?.isConnected) {
-          videoCache.currentTime = parseFloat(item.dataset.start);
-        }
-      };
-    }
-    
+  const show = subs => {
+    if (!subs?.length) return setContent('<div class="yt-subtitle-empty">No subtitles</div>');
+    setContent('<div class="yt-subtitle-text">' + subs.map(s => `<span class="yt-subtitle-item" data-start="${s.start}">${escape(s.text)}</span>`).join(' ') + '</div>');
+    const tc = panel.querySelector('.yt-subtitle-text');
+    tc && (tc.onclick = e => {const item = e.target.closest('.yt-subtitle-item'); item && videoCache?.isConnected && (videoCache.currentTime = parseFloat(item.dataset.start))});
     setTimeout(track, 500);
   };
 
   const update = () => {
-    if (!videoCache?.isConnected) {
-      videoCache = document.querySelector('video');
-    }
-    
+    videoCache?.isConnected || (videoCache = document.querySelector('video'));
     const items = panel?.querySelectorAll('.yt-subtitle-item');
     if (!videoCache || !items?.length) return;
-    
     const t = videoCache.currentTime;
-    let active = null;
-    
+    let active;
     for (const item of items) {
-      const s = parseFloat(item.dataset.start);
-      const e = item.nextElementSibling 
-        ? parseFloat(item.nextElementSibling.dataset.start) 
-        : s + 3;
-      
-      if (t >= s && t < e) {
-        active = item;
-        item.classList.add('active');
-      } else {
-        item.classList.remove('active');
-      }
+      const s = parseFloat(item.dataset.start), e = item.nextElementSibling ? parseFloat(item.nextElementSibling.dataset.start) : s + 3;
+      t >= s && t < e ? (active = item, item.classList.add('active')) : item.classList.remove('active');
     }
-    
-    if (active && contentCache?.isConnected) {
-      const scrollTop = active.offsetTop - (contentCache.clientHeight - active.clientHeight) / 2;
-      contentCache.scrollTo({ top: scrollTop, behavior: 'smooth' });
-    }
+    active && contentCache?.isConnected && contentCache.scrollTo({ top: active.offsetTop - (contentCache.clientHeight - active.clientHeight) / 2, behavior: 'smooth' });
   };
 
-  const track = () => {
-    stopTrack();
-    videoCache = document.querySelector('video');
-    if (videoCache) {
-      interval = setInterval(update, TRACK_INTERVAL);
-    }
-  };
+  const track = () => (stopTrack(), videoCache = document.querySelector('video'), videoCache && (interval = setInterval(update, 200)));
+  const stopTrack = () => interval && (clearInterval(interval), interval = null);
+  const ensure = cb => (panel || (panel = create())) ? cb() : setTimeout(() => (panel = create()) && cb(), 1000);
 
-  const stopTrack = () => {
-    if (interval) {
-      clearInterval(interval);
-      interval = null;
-    }
-  };
-
-  const ensure = (cb) => {
-    if (panel || (panel = create())) {
-      cb();
-    } else {
-      setTimeout(() => {
-        panel = create();
-        if (panel) cb();
-      }, CREATE_RETRY);
-    }
-  };
-
-  window.addEventListener('message', (e) => {
+  window.addEventListener('message', e => {
     if (e.source !== window || !e.data.type) return;
-    
-    const { type, data, format, tracks: newTracks } = e.data;
-    
-    if (type === 'YT_SUBTITLE_TRACKS' && newTracks?.length) {
-      ensure(() => panel.style.display = 'block');
-    } else if (type === 'YT_SUBTITLE_DATA') {
-      ensure(() => show(parse(data, format)));
-    }
+    const {type, data, format, tracks: t} = e.data;
+    type === 'YT_SUBTITLE_TRACKS' && t?.length ? ensure(() => panel.style.display = 'block') : type === 'YT_SUBTITLE_DATA' && ensure(() => show(parse(data, format)));
   });
 
-  const check = (retries = 0) => {
+  const check = (r = 0) => {
     if (!new URLSearchParams(location.search).get('v')) return;
+    const sec = document.querySelector('ytd-watch-flexy #secondary');
+    sec ? ((!panel || !document.body.contains(panel)) && (panel = create(), contentCache = null), window.postMessage({type: 'YT_REQUEST_TRACKS'}, '*'), addVideoClickListeners(), createSpeedControl()) : r < 10 && setTimeout(() => check(r + 1), 500);
+  };
+
+  const createSpeedControl = () => {
+    const video = document.querySelector('video');
+    const videoContainer = document.querySelector('.html5-video-player');
+    if (!video || !videoContainer || document.getElementById('yt-speed-control')) return;
     
-    const secondary = document.querySelector('ytd-watch-flexy #secondary');
-    if (secondary) {
-      if (!panel || !document.body.contains(panel)) {
-        panel = create();
-        contentCache = null;
+    const speeds = [1, 1.2, 1.5, 2, 2.5];
+    const speedControl = document.createElement('div');
+    speedControl.id = 'yt-speed-control';
+    speedControl.className = 'yt-speed-control';
+    speedControl.innerHTML = '<span class="yt-speed-control-label">Speed</span>';
+    
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'yt-speed-control-buttons';
+    
+    speeds.forEach(speed => {
+      const btn = document.createElement('button');
+      btn.className = 'yt-speed-btn';
+      btn.dataset.speed = speed;
+      btn.textContent = speed === 1 ? '1' : speed.toFixed(1);
+      btn.title = `${speed}x`;
+      buttonsContainer.appendChild(btn);
+    });
+    
+    buttonsContainer.onclick = (e) => {
+      const btn = e.target.closest('.yt-speed-btn');
+      if (btn) {
+        e.stopPropagation();
+        video.playbackRate = parseFloat(btn.dataset.speed);
+        buttonsContainer.querySelectorAll('.yt-speed-btn').forEach(b => 
+          b.classList.toggle('active', b === btn)
+        );
       }
-      window.postMessage({ type: 'YT_REQUEST_TRACKS' }, '*');
-      addVideoClickListeners();
-    } else if (retries < 10) {
-      setTimeout(() => check(retries + 1), 500);
-    }
+    };
+    
+    speedControl.appendChild(buttonsContainer);
+    buttonsContainer.querySelector(`[data-speed="${video.playbackRate}"]`)?.classList.add('active');
+    videoContainer.appendChild(speedControl);
   };
 
   const addVideoClickListeners = () => {
-    videoCache = document.querySelector('video');
-    if (!videoCache || videoCache._clickListenersAdded) return;
-    
-    const preventDefaultStop = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    
-    // Left click - rewind by leftClickStep seconds without pausing
-    videoCache.addEventListener('click', (e) => {
-      if (e.button !== 0) return;
-      preventDefaultStop(e);
-      
-      const wasPaused = videoCache.paused;
-      videoCache.currentTime = clamp(videoCache.currentTime - settings.leftClickStep, 0, videoCache.duration);
-      
-      if (!wasPaused) {
-        videoCache.play().catch(() => {});
-      }
-    }, true);
-    
-    // Double click - prevent fullscreen
-    videoCache.addEventListener('dblclick', preventDefaultStop, true);
-    
-    // Right click - toggle pause
-    videoCache.addEventListener('contextmenu', (e) => {
-      preventDefaultStop(e);
-      videoCache.paused ? videoCache.play().catch(() => {}) : videoCache.pause();
-    }, true);
-    
-    // Mouse wheel - forward/backward by mouseWheelStep seconds
-    videoCache.addEventListener('wheel', (e) => {
-      preventDefaultStop(e);
-      const delta = e.deltaY < 0 ? settings.mouseWheelStep : -settings.mouseWheelStep;
-      videoCache.currentTime = clamp(videoCache.currentTime + delta, 0, videoCache.duration);
-    }, true);
-    
+    if (!(videoCache = document.querySelector('video')) || videoCache._clickListenersAdded) return;
+    const stop = e => (e.preventDefault(), e.stopPropagation());
+    videoCache.addEventListener('click', e => e.button === 0 && (stop(e), (p => (videoCache.currentTime = clamp(videoCache.currentTime - settings.leftClickStep, 0, videoCache.duration), p || videoCache.play().catch(() => {})))(videoCache.paused)), true);
+    videoCache.addEventListener('dblclick', stop, true);
+    videoCache.addEventListener('contextmenu', e => (stop(e), videoCache.paused ? videoCache.play().catch(() => {}) : videoCache.pause()), true);
+    videoCache.addEventListener('wheel', e => (stop(e), videoCache.currentTime = clamp(videoCache.currentTime + (e.deltaY < 0 ? settings.mouseWheelStep : -settings.mouseWheelStep), 0, videoCache.duration)), true);
     videoCache._clickListenersAdded = true;
   };
 
-  // Load settings from storage
-  chrome.storage.sync.get(['leftClickStep', 'mouseWheelStep'], (result) => {
-    settings = {
-      leftClickStep: result.leftClickStep ?? settings.leftClickStep,
-      mouseWheelStep: result.mouseWheelStep ?? settings.mouseWheelStep
-    };
-  });
+  chrome.storage.sync.get(['leftClickStep', 'mouseWheelStep'], r => settings = {leftClickStep: r.leftClickStep ?? 2, mouseWheelStep: r.mouseWheelStep ?? 2});
+  chrome.runtime.onMessage.addListener(m => {const k = {UPDATE_LEFT_CLICK_STEP: 'leftClickStep', UPDATE_MOUSE_WHEEL_STEP: 'mouseWheelStep'}[m.type]; k && m.value !== undefined && (settings[k] = m.value)});
   
-  // Listen for updates to settings
-  chrome.runtime.onMessage.addListener((message) => {
-    const updateMap = {
-      'UPDATE_LEFT_CLICK_STEP': 'leftClickStep',
-      'UPDATE_MOUSE_WHEEL_STEP': 'mouseWheelStep'
-    };
-    
-    const key = updateMap[message.type];
-    if (key && message.value !== undefined) {
-      settings[key] = message.value;
-    }
-  });
-
   inject();
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', () => setTimeout(check, 2000)) : setTimeout(check, 2000);
   
-  // Initial setup
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(check, CHECK_DELAY));
-  } else {
-    setTimeout(check, CHECK_DELAY);
-  }
-  
-  // Watch for URL changes (YouTube SPA navigation)
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      videoCache = null;
-      contentCache = null;
-      setTimeout(check, CHECK_DELAY);
-    }
-  }).observe(document, { subtree: true, childList: true });
+  let url = location.href;
+  const nav = () => location.href !== url && (url = location.href, videoCache = contentCache = null, document.getElementById('yt-speed-control')?.remove(), setTimeout(check, 2000));
+  new MutationObserver(nav).observe(document.querySelector('title') || document.documentElement, {childList: true, subtree: false});
+  window.addEventListener('yt-navigate-finish', nav);
 })();

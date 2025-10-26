@@ -1,79 +1,11 @@
-// popup.js
 'use strict';
+const send = async (t, v) => {const [tab] = await chrome.tabs.query({active: true, currentWindow: true}); tab?.url?.includes('youtube.com') && chrome.tabs.sendMessage(tab.id, {type: t, value: v}).catch(() => {})};
+const save = (k, v, t) => (chrome.storage.sync.set({[k]: v}), send(t, v));
 
-// Initialize popup when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('Popup initialized');
-  
-  // Initialize left click step input
-  const leftClickStepInput = document.getElementById('leftClickStep');
-  const mouseWheelStepInput = document.getElementById('mouseWheelStep');
-  
-  // Load saved values from storage
-  chrome.storage.sync.get(['leftClickStep', 'mouseWheelStep'], (result) => {
-    const savedLeftClick = result.leftClickStep || 2.0;
-    const savedMouseWheel = result.mouseWheelStep || 2;
-    
-    leftClickStepInput.value = savedLeftClick;
-    mouseWheelStepInput.value = savedMouseWheel;
-  });
-  
-  // Update and save left click step value when input changes
-  leftClickStepInput.addEventListener('input', (e) => {
-    const value = parseFloat(e.target.value);
-    
-    // Save to chrome storage
-    chrome.storage.sync.set({ leftClickStep: value }, () => {
-      console.log('Left click step saved:', value);
-    });
-    
-    // Send message to content script
-    sendMessageToContentScript({
-      type: 'UPDATE_LEFT_CLICK_STEP',
-      value: value
-    });
-  });
-  
-  // Update and save mouse wheel step value when input changes
-  mouseWheelStepInput.addEventListener('input', (e) => {
-    const value = parseInt(e.target.value);
-    
-    // Save to chrome storage
-    chrome.storage.sync.set({ mouseWheelStep: value }, () => {
-      console.log('Mouse wheel step saved:', value);
-    });
-    
-    // Send message to content script
-    sendMessageToContentScript({
-      type: 'UPDATE_MOUSE_WHEEL_STEP',
-      value: value
-    });
-  });
+  const l = document.getElementById('leftClickStep'), m = document.getElementById('mouseWheelStep');
+  chrome.storage.sync.get(['leftClickStep', 'mouseWheelStep'], r => (l.value = r.leftClickStep ?? 2, m.value = r.mouseWheelStep ?? 2));
+  l.addEventListener('input', e => save('leftClickStep', parseFloat(e.target.value), 'UPDATE_LEFT_CLICK_STEP'));
+  m.addEventListener('input', e => save('mouseWheelStep', parseInt(e.target.value), 'UPDATE_MOUSE_WHEEL_STEP'));
 });
-
-// Example: Listen for messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Message received in popup:', message);
-  
-  // Handle different message types here
-  if (message.type === 'UPDATE_POPUP') {
-    // Update popup UI based on message
-  }
-  
-  sendResponse({ status: 'received' });
-});
-
-// Example: Query active tab
-async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
-}
-
-// Example: Send message to content script
-async function sendMessageToContentScript(message) {
-  const tab = await getActiveTab();
-  if (tab && tab.url?.includes('youtube.com')) {
-    chrome.tabs.sendMessage(tab.id, message);
-  }
-}
 
