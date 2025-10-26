@@ -32,6 +32,7 @@
     // Remove existing panel if any
     const existing = document.getElementById('yt-subtitle-panel');
     if (existing) {
+      stopTracking();
       existing.remove();
     }
 
@@ -61,6 +62,7 @@
     closeBtn.textContent = '×';
     closeBtn.title = 'Hide subtitle panel';
     closeBtn.addEventListener('click', () => {
+      stopTracking();
       panel.style.display = 'none';
     });
     
@@ -194,6 +196,9 @@
         seekToTime(startTime);
       });
     });
+
+    // Start auto-scroll tracking
+    setTimeout(startTracking, 500);
   }
 
   // Escape HTML to prevent XSS
@@ -208,6 +213,56 @@
     const video = document.querySelector('video');
     if (video) {
       video.currentTime = seconds;
+    }
+  }
+
+  // Auto-scroll tracking
+  let trackingInterval = null;
+
+  function updateActiveSubtitle() {
+    const video = document.querySelector('video');
+    if (!video || !subtitlePanel) return;
+
+    const currentTime = video.currentTime;
+    const items = subtitlePanel.querySelectorAll('.yt-subtitle-item');
+    if (items.length === 0) return;
+    
+    let activeItem = null;
+    items.forEach(item => {
+      const start = parseFloat(item.getAttribute('data-start'));
+      const nextItem = item.nextElementSibling;
+      const end = nextItem ? parseFloat(nextItem.getAttribute('data-start')) : start + 3;
+      
+      if (currentTime >= start && currentTime < end) {
+        activeItem = item;
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
+    });
+
+    // Scroll to center the active subtitle
+    if (activeItem) {
+      activeItem.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center',
+        inline: 'nearest'
+      });
+    }
+  }
+
+  function startTracking() {
+    stopTracking();
+    const video = document.querySelector('video');
+    if (video) {
+      trackingInterval = setInterval(updateActiveSubtitle, 200);
+    }
+  }
+
+  function stopTracking() {
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+      trackingInterval = null;
     }
   }
 
@@ -309,4 +364,3 @@
 
   initialize();
 })();
-

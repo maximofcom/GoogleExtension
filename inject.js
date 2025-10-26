@@ -200,4 +200,3 @@
 
   console.log('[YT Subtitles] Inject script initialized');
 })();
-

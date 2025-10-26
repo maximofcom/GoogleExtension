@@ -87,6 +87,7 @@
   background: var(--yt-spec-general-background-a);
   scrollbar-width: thin;
   scrollbar-color: var(--yt-spec-icon-disabled) transparent;
+  scroll-behavior: smooth;
 }
 
 .yt-subtitle-content::-webkit-scrollbar {
@@ -129,6 +130,16 @@
 
 .yt-subtitle-item:active {
   transform: translateX(2px);
+}
+
+.yt-subtitle-item.active {
+  border-left: 4px solid #3ea6ff;
+  background: var(--yt-spec-badge-chip-background);
+}
+
+.yt-subtitle-item.active .yt-subtitle-time {
+  color: #3ea6ff;
+  font-weight: 600;
 }
 
 .yt-subtitle-time {
@@ -213,4 +224,3 @@ ytd-watch-flexy[fullscreen] .yt-subtitle-panel {
   display: flex;
   flex-direction: column;
 }
-

@@ -19,24 +19,18 @@ A Chrome extension that displays YouTube video subtitles in a convenient sidebar
 
 The extension uses a multi-layered approach to extract and display subtitles:
 
-### 1. Script Injection
-- **inject.js** runs in the page context to access YouTube's global variables
-- Gains access to the player API and internal YouTube objects
-
-### 2. Metadata Extraction
-- Extracts video metadata from `ytInitialPlayerResponse`
-- Parses HTML script tags as fallback
-- Accesses player API directly when available
-
-### 3. Subtitle Track Discovery
-- Identifies all available caption tracks
-- Filters by language
-- Prioritizes user-generated captions over auto-generated (ASR)
-
-### 4. Request Interception
-- Intercepts XMLHttpRequest calls to subtitle endpoints
-- Captures subtitle data in JSON3, SRV3, or XML formats
-- Forwards data to content script for display
+### 1. Inject Script into Page Context               
+│    - Access site's global variables              
+│    - Get player API access     
+### 2. Extract Video Metadata                          │
+│    - ytInitialPlayerResponse / API / HTML 
+### 3. Discover Available Subtitle Tracks              │
+│    - Parse caption track list                      │
+│    - Filter by language                            │
+│    - Prioritize user-generated over auto  
+### 4. Start Request Interceptor                       │
+│    - XMLHttpRequestInterceptor.apply()             │
+│    - Listen for subtitle URL patterns
 
 ## Installation
 
@@ -120,4 +114,3 @@ To modify the extension:
 ## License
 
 This project is provided as-is for educational and personal use.
-
