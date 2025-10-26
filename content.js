@@ -1,222 +1,138 @@
-// content.js - Content script that injects into YouTube pages
+// content.js
 (function() {
-  'use strict';
+  let panel, tracks = [], interval;
 
-  let subtitlePanel = null;
-  let currentSubtitles = [];
-  let availableTracks = [];
-  let trackingInterval = null;
-
-  const injectPageScript = () => {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject.js');
-    script.onload = () => script.remove();
-    (document.head || document.documentElement).appendChild(script);
+  const inject = () => {
+    const s = document.createElement('script');
+    s.src = chrome.runtime.getURL('inject.js');
+    s.onload = () => s.remove();
+    (document.head || document.documentElement).appendChild(s);
   };
 
-  const createSubtitlePanel = () => {
-    const secondary = document.querySelector('ytd-watch-flexy #secondary');
-    if (!secondary) return null;
+  const create = () => {
+    const sec = document.querySelector('ytd-watch-flexy #secondary');
+    if (!sec) return null;
 
-    const existing = document.getElementById('yt-subtitle-panel');
-    if (existing) {
-      stopTracking();
-      existing.remove();
-    }
+    const old = document.getElementById('yt-subtitle-panel');
+    if (old) { stopTrack(); old.remove(); }
 
-    const panel = document.createElement('div');
-    panel.id = 'yt-subtitle-panel';
-    panel.className = 'yt-subtitle-panel';
-    panel.innerHTML = `
-      <div class="yt-subtitle-header">
-        <div class="yt-subtitle-title">Video Subtitles</div>
-        <div class="yt-subtitle-controls">
-          <select class="yt-subtitle-track-select"><option value="">Select language...</option></select>
-          <button class="yt-subtitle-close" title="Hide subtitle panel">×</button>
-        </div>
-      </div>
-      <div class="yt-subtitle-content"><div class="yt-subtitle-loading">Loading subtitles...</div></div>
-    `;
+    const p = document.createElement('div');
+    p.id = 'yt-subtitle-panel';
+    p.className = 'yt-subtitle-panel';
+    p.innerHTML = `<div class="yt-subtitle-header"><div class="yt-subtitle-title">Video Subtitles</div>
+      <div class="yt-subtitle-controls"><select class="yt-subtitle-track-select"></select>
+      <button class="yt-subtitle-close" title="Hide">×</button></div></div>
+      <div class="yt-subtitle-content"><div class="yt-subtitle-loading">Loading...</div></div>`;
 
-    panel.querySelector('.yt-subtitle-track-select').addEventListener('change', handleTrackChange);
-    panel.querySelector('.yt-subtitle-close').addEventListener('click', () => {
-      stopTracking();
-      panel.style.display = 'none';
-    });
+    p.querySelector('.yt-subtitle-track-select').onchange = e => {
+      const i = parseInt(e.target.value);
+      if (!isNaN(i) && tracks[i]) {
+        window.postMessage({ type: 'YT_FETCH_TRACK', track: tracks[i] }, '*');
+        setContent('<div class="yt-subtitle-loading">Loading...</div>');
+      }
+    };
+    p.querySelector('.yt-subtitle-close').onclick = () => { stopTrack(); p.style.display = 'none'; };
 
-    secondary.insertBefore(panel, secondary.firstChild);
-    return panel;
+    sec.insertBefore(p, sec.firstChild);
+    return p;
   };
 
-  const handleTrackChange = (e) => {
-    const idx = parseInt(e.target.value);
-    if (isNaN(idx) || !availableTracks[idx]) return;
-    window.postMessage({ type: 'YT_FETCH_TRACK', track: availableTracks[idx] }, '*');
-    updateSubtitleContent('<div class="yt-subtitle-loading">Loading subtitles...</div>');
-  };
-
-  const parseSubtitles = (data, format) => {
-    const subtitles = [];
+  const parse = (data, fmt) => {
+    const subs = [];
     try {
-      if (format === 'json3' || format === 'json') {
+      if (fmt === 'json3' || fmt === 'json') {
         (JSON.parse(data).events || []).forEach(e => {
           if (e.segs) {
-            const text = e.segs.map(s => s.utf8 || '').join('').trim();
-            if (text) subtitles.push({ start: e.tStartMs / 1000, duration: e.dDurationMs / 1000, text });
+            const txt = e.segs.map(s => s.utf8 || '').join('').trim();
+            if (txt) subs.push({ start: e.tStartMs / 1000, text: txt });
           }
         });
-      } else if (format === 'srv3' || format === 'xml') {
-        const xmlDoc = new DOMParser().parseFromString(data, 'text/xml');
-        Array.from(xmlDoc.getElementsByTagName('text')).forEach(el => {
-          const text = el.textContent?.trim();
-          if (text) {
-            subtitles.push({
-              start: parseFloat(el.getAttribute('start') || 0),
-              duration: parseFloat(el.getAttribute('dur') || 0),
-              text
-            });
-          }
+      } else {
+        Array.from(new DOMParser().parseFromString(data, 'text/xml').getElementsByTagName('text')).forEach(el => {
+          const txt = el.textContent?.trim();
+          if (txt) subs.push({ start: parseFloat(el.getAttribute('start') || 0), text: txt });
         });
       }
     } catch (e) {}
-    return subtitles;
+    return subs;
   };
 
-  const updateSubtitleContent = (html) => {
-    const content = subtitlePanel?.querySelector('.yt-subtitle-content');
-    if (content) content.innerHTML = html;
+  const escape = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+  const setContent = h => { const c = panel?.querySelector('.yt-subtitle-content'); if (c) c.innerHTML = h; };
+
+  const show = subs => {
+    if (!subs?.length) return setContent('<div class="yt-subtitle-empty">No subtitles</div>');
+    setContent('<div class="yt-subtitle-text">' + subs.map(s => 
+      `<span class="yt-subtitle-item" data-start="${s.start}">${escape(s.text)}</span>`).join(' ') + '</div>');
+    panel.querySelectorAll('.yt-subtitle-item').forEach(item => 
+      item.onclick = () => { const v = document.querySelector('video'); if (v) v.currentTime = parseFloat(item.dataset.start); });
+    setTimeout(track, 500);
   };
 
-  const escapeHtml = (text) => {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  };
-
-  const displaySubtitles = (subs) => {
-    if (!subs?.length) return updateSubtitleContent('<div class="yt-subtitle-empty">No subtitles available</div>');
-    
-    const html = '<div class="yt-subtitle-text">' + 
-      subs.map(s => `<span class="yt-subtitle-item" data-start="${s.start}">${escapeHtml(s.text)}</span>`).join(' ') + 
-      '</div>';
-    
-    updateSubtitleContent(html);
-    subtitlePanel.querySelectorAll('.yt-subtitle-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const video = document.querySelector('video');
-        if (video) video.currentTime = parseFloat(item.getAttribute('data-start'));
-      });
-    });
-    setTimeout(startTracking, 500);
-  };
-
-  const updateActiveSubtitle = () => {
-    const video = document.querySelector('video');
-    if (!video || !subtitlePanel) return;
-
-    const time = video.currentTime;
-    const items = subtitlePanel.querySelectorAll('.yt-subtitle-item');
+  const update = () => {
+    const v = document.querySelector('video');
+    if (!v || !panel) return;
+    const t = v.currentTime, items = panel.querySelectorAll('.yt-subtitle-item');
     if (!items.length) return;
-    
-    let active = null;
+    let active;
     items.forEach(item => {
-      const start = parseFloat(item.getAttribute('data-start'));
-      const end = item.nextElementSibling ? parseFloat(item.nextElementSibling.getAttribute('data-start')) : start + 3;
-      
-      if (time >= start && time < end) {
-        active = item;
-        item.classList.add('active');
-      } else {
-        item.classList.remove('active');
-      }
+      const s = parseFloat(item.dataset.start);
+      const e = item.nextElementSibling ? parseFloat(item.nextElementSibling.dataset.start) : s + 3;
+      if (t >= s && t < e) { active = item; item.classList.add('active'); } 
+      else item.classList.remove('active');
     });
-
-    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-  };
-
-  const startTracking = () => {
-    stopTracking();
-    if (document.querySelector('video')) trackingInterval = setInterval(updateActiveSubtitle, 200);
-  };
-
-  const stopTracking = () => {
-    if (trackingInterval) {
-      clearInterval(trackingInterval);
-      trackingInterval = null;
-    }
-  };
-
-  const updateTrackSelector = (tracks) => {
-    const select = subtitlePanel?.querySelector('.yt-subtitle-track-select');
-    if (!select) return;
-    
-    select.innerHTML = tracks.map((t, i) => {
-      const name = t.name?.simpleText || t.languageCode || 'Unknown';
-      const type = t.kind === 'asr' ? ' (Auto-generated)' : '';
-      return `<option value="${i}">${name}${type}</option>`;
-    }).join('');
-    
-    if (tracks.length) select.selectedIndex = 0;
-  };
-
-  const ensurePanel = (callback) => {
-    if (!subtitlePanel) {
-      subtitlePanel = createSubtitlePanel();
-      if (!subtitlePanel) {
-        setTimeout(() => {
-          subtitlePanel = createSubtitlePanel();
-          if (subtitlePanel) callback();
-        }, 1000);
-        return false;
+    if (active) {
+      const container = panel.querySelector('.yt-subtitle-content');
+      if (container) {
+        const itemRect = active.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
+          const offset = active.offsetTop - container.offsetTop - container.clientHeight / 2 + active.clientHeight / 2;
+          container.scrollTo({ top: offset, behavior: 'smooth' });
+        }
       }
     }
-    return true;
   };
 
-  window.addEventListener('message', (e) => {
+  const track = () => { stopTrack(); if (document.querySelector('video')) interval = setInterval(update, 200); };
+  const stopTrack = () => { if (interval) { clearInterval(interval); interval = null; } };
+
+  const setTracks = t => {
+    const sel = panel?.querySelector('.yt-subtitle-track-select');
+    if (!sel) return;
+    sel.innerHTML = t.map((tr, i) => 
+      `<option value="${i}">${tr.name?.simpleText || tr.languageCode || 'Unknown'}${tr.kind === 'asr' ? ' (Auto)' : ''}</option>`).join('');
+    if (t.length) sel.selectedIndex = 0;
+  };
+
+  const ensure = cb => {
+    if (!panel && !(panel = create())) return setTimeout(() => { panel = create(); if (panel) cb(); }, 1000);
+    return cb();
+  };
+
+  window.addEventListener('message', e => {
     if (e.source !== window) return;
-    
     if (e.data.type === 'YT_SUBTITLE_TRACKS') {
-      availableTracks = e.data.tracks || [];
-      if (ensurePanel(() => {
-        updateTrackSelector(availableTracks);
-        if (availableTracks.length) subtitlePanel.style.display = 'block';
-      }) && availableTracks.length) {
-        updateTrackSelector(availableTracks);
-        subtitlePanel.style.display = 'block';
-      }
+      tracks = e.data.tracks || [];
+      ensure(() => { setTracks(tracks); if (tracks.length) panel.style.display = 'block'; });
     } else if (e.data.type === 'YT_SUBTITLE_DATA') {
-      currentSubtitles = parseSubtitles(e.data.data, e.data.format);
-      if (ensurePanel(() => displaySubtitles(currentSubtitles))) {
-        displaySubtitles(currentSubtitles);
-      }
+      ensure(() => show(parse(e.data.data, e.data.format)));
     }
   });
 
-  const checkAndCreatePanel = (retries = 0) => {
-    const videoId = new URLSearchParams(window.location.search).get('v');
-    if (!videoId) return;
-    
+  const check = (r = 0) => {
+    if (!new URLSearchParams(location.search).get('v')) return;
     if (document.querySelector('ytd-watch-flexy #secondary')) {
-      if (!subtitlePanel || !document.body.contains(subtitlePanel)) {
-        subtitlePanel = createSubtitlePanel();
-      }
+      if (!panel || !document.body.contains(panel)) panel = create();
       window.postMessage({ type: 'YT_REQUEST_TRACKS' }, '*');
-    } else if (retries < 10) {
-      setTimeout(() => checkAndCreatePanel(retries + 1), 500);
-    }
+    } else if (r < 10) setTimeout(() => check(r + 1), 500);
   };
 
-  injectPageScript();
-  
-  const init = () => setTimeout(checkAndCreatePanel, 2000);
+  inject();
+  const init = () => setTimeout(check, 2000);
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
   
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      setTimeout(checkAndCreatePanel, 2000);
-    }
-  }).observe(document, { subtree: true, childList: true });
+  let url = location.href;
+  new MutationObserver(() => { if (location.href !== url) { url = location.href; setTimeout(check, 2000); } })
+    .observe(document, { subtree: true, childList: true });
 })();
