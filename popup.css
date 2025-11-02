@@ -1,195 +1,31 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  width: 320px;
-  min-height: 200px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #f9f9f9;
-  color: #333;
-}
-
-.popup-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 200px;
-}
-
-/* Header */
-.popup-header {
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  text-align: center;
-}
-
-.popup-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.popup-version {
-  font-size: 12px;
-  opacity: 0.9;
-}
-
-/* Content */
-.popup-content {
-  flex: 1;
-  padding: 20px;
-  min-height: 100px;
-}
-
-/* Footer */
-.popup-footer {
-  padding: 12px 20px;
-  background: #fff;
-  border-top: 1px solid #e0e0e0;
-  text-align: center;
-}
-
-.popup-info {
-  font-size: 12px;
-  color: #666;
-}
-
-/* Utility Classes */
-.text-center {
-  text-align: center;
-}
-
-.text-muted {
-  color: #666;
-}
-
-.mb-1 {
-  margin-bottom: 8px;
-}
-
-.mb-2 {
-  margin-bottom: 16px;
-}
-
-.mt-1 {
-  margin-top: 8px;
-}
-
-.mt-2 {
-  margin-top: 16px;
-}
-
-/* Buttons (for future use) */
-button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-button.primary {
-  background: #667eea;
-  color: white;
-}
-
-button.primary:hover {
-  background: #5568d3;
-}
-
-button.secondary {
-  background: #e0e0e0;
-  color: #333;
-}
-
-button.secondary:hover {
-  background: #d0d0d0;
-}
-
-/* Links (for future use) */
-a {
-  color: #667eea;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-a:hover {
-  color: #5568d3;
-  text-decoration: underline;
-}
-
-/* Input fields (for future use) */
-input[type="text"],
-input[type="number"],
-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-}
-
-input[type="text"]:focus,
-input[type="number"]:focus,
-select:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-/* Checkbox (for future use) */
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-label {
-  font-size: 14px;
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Setting Group */
-.setting-group {
-  margin-bottom: 20px;
-  padding: 16px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.setting-label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 8px;
-}
-
-.setting-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-  transition: border-color 0.2s;
-}
-
-.setting-input:focus {
-  border-color: #667eea;
-}
-
-
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:320px;min-height:200px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#f9f9f9;color:#333}
+.popup-container{display:flex;flex-direction:column;min-height:200px}
+.popup-header{padding:16px 20px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-align:center}
+.popup-title{font-size:18px;font-weight:600;margin-bottom:4px}
+.popup-version{font-size:12px;opacity:.9}
+.popup-content{flex:1;padding:20px;min-height:100px}
+.popup-footer{padding:12px 20px;background:#fff;border-top:1px solid #e0e0e0;text-align:center}
+.popup-info{font-size:12px;color:#666}
+.text-center{text-align:center}
+.text-muted{color:#666}
+.mb-1{margin-bottom:8px}
+.mb-2{margin-bottom:16px}
+.mt-1{margin-top:8px}
+.mt-2{margin-top:16px}
+button{padding:8px 16px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s}
+button.primary{background:#667eea;color:white}
+button.primary:hover{background:#5568d3}
+button.secondary{background:#e0e0e0;color:#333}
+button.secondary:hover{background:#d0d0d0}
+a{color:#667eea;text-decoration:none;transition:color .2s}
+a:hover{color:#5568d3;text-decoration:underline}
+input[type="text"],input[type="number"],select{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;transition:border-color .2s}
+input[type="text"]:focus,input[type="number"]:focus,select:focus{outline:none;border-color:#667eea}
+.checkbox-group{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+input[type="checkbox"]{width:18px;height:18px;cursor:pointer}
+label{font-size:14px;cursor:pointer;user-select:none}
+.setting-group{margin-bottom:20px;padding:16px;background:white;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.setting-label{display:block;font-size:14px;font-weight:500;color:#333;margin-bottom:8px}
+.setting-input{width:100%;padding:10px 12px;border:2px solid #ddd;border-radius:6px;font-size:16px;transition:border-color .2s}
+.setting-input:focus{border-color:#667eea}
