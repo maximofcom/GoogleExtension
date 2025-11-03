@@ -27,7 +27,28 @@
 
     <footer class="popup-footer">
       <p class="popup-info">Extension is active on YouTube</p>
+      <button class="primary" onclick="openDialog('example-dialog')">Open Dialog</button>
     </footer>
+  </div>
+
+  <!-- Example Dialog Component -->
+  <div id="example-dialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-description" data-state="closed" onclick="handleOverlayClick(event, 'example-dialog')">
+    <div class="dialog-content" tabindex="-1" onclick="event.stopPropagation()">
+      <button class="dialog-close" onclick="closeDialog('example-dialog')" aria-label="Close">×</button>
+      <div class="dialog-header">
+        <h2 id="dialog-title" class="dialog-title">Dialog Title</h2>
+        <p id="dialog-description" class="dialog-description">
+          This is a dialog component built with shadcn/ui design patterns. You can customize the content as needed.
+        </p>
+      </div>
+      <div class="dialog-body">
+        <p>This is the dialog body content. You can add any HTML content here.</p>
+      </div>
+      <div class="dialog-footer">
+        <button class="secondary" onclick="closeDialog('example-dialog')">Cancel</button>
+        <button class="primary" onclick="handleDialogConfirm('example-dialog')">Confirm</button>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

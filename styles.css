@@ -26,3 +26,10 @@ ytd-watch-flexy[theater] .yt-subtitle-panel,ytd-watch-flexy[fullscreen] .yt-subt
 .yt-speed-btn:hover {background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3);color:white}
 .yt-speed-btn.active {background:rgba(62,166,255,.6);border-color:rgba(62,166,255,.8);color:white;box-shadow:0 0 4px rgba(62,166,255,.4)}
 .yt-speed-btn:active {transform:scale(.95)}
+.yt-resolution-control {position:absolute;top:10px;right:10px;z-index:100;display:flex;align-items:center;gap:4px;padding:3px 6px;background:rgba(0,0,0,.4);border-radius:4px;user-select:none;backdrop-filter:blur(3px);flex-wrap:wrap;max-width:300px}
+.yt-resolution-control-label {font-size:10px;font-weight:500;color:rgba(255,255,255,.7);margin-right:2px;flex-shrink:0}
+.yt-resolution-control-buttons {display:flex;gap:2px;flex-wrap:wrap}
+.yt-resolution-btn {min-width:24px;padding:2px 4px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:3px;color:rgba(255,255,255,.8);font-size:9px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap}
+.yt-resolution-btn:hover {background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3);color:white}
+.yt-resolution-btn.active {background:rgba(62,166,255,.6);border-color:rgba(62,166,255,.8);color:white;box-shadow:0 0 4px rgba(62,166,255,.4)}
+.yt-resolution-btn:active {transform:scale(.95)}

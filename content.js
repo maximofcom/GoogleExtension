@@ -70,7 +70,7 @@
   const check = (r = 0) => {
     if (!new URLSearchParams(location.search).get('v')) return;
     const sec = $('ytd-watch-flexy #secondary');
-    sec ? ((!panel || !document.body.contains(panel)) && (panel = create(), contentCache = null), window.postMessage({type: 'YT_REQUEST_TRACKS'}, '*'), addVideoClickListeners(), createSpeedControl()) : r < 10 && setTimeout(() => check(r + 1), 500);
+    sec ? ((!panel || !document.body.contains(panel)) && (panel = create(), contentCache = null), window.postMessage({type: 'YT_REQUEST_TRACKS'}, '*'), addVideoClickListeners(), createSpeedControl(), createResolutionControl()) : r < 10 && setTimeout(() => check(r + 1), 500);
   };
 
   const createSpeedControl = () => {
@@ -90,6 +90,101 @@
     c.appendChild(sc);
   };
 
+  const setQuality = (quality) => {
+    const v = $('video');
+    if (!v) return;
+    const qualityMap = {'144': 'tiny', '240': 'small', '360': 'medium', '480': 'large', '720': 'hd720', '1080': 'hd1080', '1440': 'hd1440', '2160': 'hd2160', 'Auto': 'auto'};
+    const ytQuality = qualityMap[quality];
+    if (!ytQuality) return;
+    try {
+      if (v.setPlaybackQuality && typeof v.setPlaybackQuality === 'function') {
+        v.setPlaybackQuality(ytQuality);
+        return;
+      }
+      const player = v.closest('.html5-video-player');
+      let playerApi = null;
+      if (window.ytplayer && typeof window.ytplayer.setPlaybackQuality === 'function') {
+        playerApi = window.ytplayer;
+      } else if (player && window.yt?.player?.getInstanceByElement) {
+        playerApi = window.yt.player.getInstanceByElement(player);
+      }
+      if (playerApi && typeof playerApi.setPlaybackQuality === 'function') {
+        playerApi.setPlaybackQuality(ytQuality);
+        return;
+      }
+      const settingsBtn = $('.ytp-settings-button');
+      if (settingsBtn) {
+        const menu = $('.ytp-settings-menu');
+        const wasOpen = menu && window.getComputedStyle(menu).display !== 'none';
+        const closeMenus = () => {
+          const menus = ['.ytp-settings-menu', '.ytp-quality-menu', 'ytd-menu-popup-renderer'];
+          menus.forEach(sel => {
+            $$(sel).forEach(m => {
+              if (m && window.getComputedStyle(m).display !== 'none') {
+                m.style.display = 'none';
+                m.style.visibility = 'hidden';
+                m.style.opacity = '0';
+              }
+            });
+          });
+          if (!wasOpen) {
+            settingsBtn?.click();
+            setTimeout(() => settingsBtn?.click(), 50);
+          }
+        };
+        if (!wasOpen) settingsBtn.click();
+        setTimeout(() => {
+          const qualityMenu = Array.from($$('.ytp-menuitem')).find(el => {
+            const label = el.querySelector('.ytp-menuitem-label');
+            return label && label.textContent.includes('Quality');
+          });
+          if (qualityMenu) {
+            qualityMenu.click();
+            setTimeout(() => {
+              const qualityOption = Array.from($$('.ytp-quality-menu .ytp-menuitem')).find(el => {
+                const text = el.textContent.trim();
+                return quality === 'Auto' ? text.includes('Auto') || text.includes('automatic') : text.includes(quality);
+              });
+              if (qualityOption) {
+                qualityOption.click();
+                hideMenusTimeout = setTimeout(() => hideMenusTimeout = null, 500);
+                closeMenus();
+              } else {
+                closeMenus();
+              }
+            }, 100);
+          } else {
+            closeMenus();
+          }
+        }, 100);
+      }
+    } catch (e) {}
+  };
+
+  const createResolutionControl = () => {
+    const v = $('video'), c = $('.html5-video-player');
+    if (!v || !c || document.getElementById('yt-resolution-control')) return;
+    const rc = Object.assign(document.createElement('div'), {id: 'yt-resolution-control', className: 'yt-resolution-control'});
+    const bc = Object.assign(document.createElement('div'), {className: 'yt-resolution-control-buttons'});
+    ['144', '240', '360', '480', '720', '1080', '1440', '2160', 'Auto'].forEach(res => {
+      const b = Object.assign(document.createElement('button'), {className: 'yt-resolution-btn', textContent: res, title: res === 'Auto' ? 'Auto' : `${res}p`});
+      b.dataset.quality = res;
+      bc.appendChild(b);
+    });
+    bc.onclick = e => {
+      const b = e.target.closest('.yt-resolution-btn');
+      if (b) {
+        e.stopPropagation();
+        setQuality(b.dataset.quality);
+        bc.querySelectorAll('.yt-resolution-btn').forEach(x => x.classList.toggle('active', x === b));
+      }
+    };
+    rc.innerHTML = '<span class="yt-resolution-control-label">Quality</span>';
+    rc.appendChild(bc);
+    bc.querySelector('[data-quality="Auto"]')?.classList.add('active');
+    c.appendChild(rc);
+  };
+
   const addVideoClickListeners = () => {
     if (!(videoCache = $('video')) || videoCache._clickListenersAdded) return;
     const stop = e => (e.preventDefault(), e.stopPropagation());
@@ -102,10 +197,27 @@
 
   chrome.storage.sync.get(['leftClickStep', 'mouseWheelStep'], r => settings = {leftClickStep: r.leftClickStep ?? 2, mouseWheelStep: r.mouseWheelStep ?? 2});
   chrome.runtime.onMessage.addListener(m => {const k = {UPDATE_LEFT_CLICK_STEP: 'leftClickStep', UPDATE_MOUSE_WHEEL_STEP: 'mouseWheelStep'}[m.type]; k && m.value !== undefined && (settings[k] = m.value)});
+  let hideMenusTimeout = null;
+  const menuObserver = new MutationObserver(() => {
+    if (hideMenusTimeout !== null) {
+      clearTimeout(hideMenusTimeout);
+      hideMenusTimeout = setTimeout(() => {
+        $$('.ytp-settings-menu, .ytp-quality-menu').forEach(m => {
+          if (m && window.getComputedStyle(m).display !== 'none') {
+            m.style.display = 'none';
+            m.style.visibility = 'hidden';
+            m.style.opacity = '0';
+          }
+        });
+        hideMenusTimeout = null;
+      }, 10);
+    }
+  });
+  menuObserver.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class']});
   inject();
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', () => setTimeout(check, 2000)) : setTimeout(check, 2000);
   let url = location.href;
-  const nav = () => location.href !== url && (url = location.href, videoCache = contentCache = null, document.getElementById('yt-speed-control')?.remove(), setTimeout(check, 2000));
+  const nav = () => location.href !== url && (url = location.href, videoCache = contentCache = null, document.getElementById('yt-speed-control')?.remove(), document.getElementById('yt-resolution-control')?.remove(), setTimeout(check, 2000));
   new MutationObserver(nav).observe($('title') || document.documentElement, {childList: true, subtree: false});
   window.addEventListener('yt-navigate-finish', nav);
 })();
